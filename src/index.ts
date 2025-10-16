@@ -8,6 +8,7 @@ import type {
   Page,
   LaunchOptions,
   BrowserContextOptions,
+  Response,
 } from "playwright";
 
 const PATCHED = Symbol.for("aluvia.patched");
@@ -41,8 +42,52 @@ async function getProxy() {
   };
 }
 
+// Mirror common page events so existing listeners keep working
+const MIRROR_EVENTS = [
+  "close",
+  "crash",
+  "domcontentloaded",
+  "download",
+  "filechooser",
+  "framedetached",
+  "framenavigated",
+  "load",
+  "pageerror",
+  "popup",
+  "request",
+  "requestfailed",
+  "requestfinished",
+  "response",
+  "websocket",
+  "console",
+  "dialog",
+  "video",
+] as const;
+
+function mirrorEvents(fromPage: Page, toPage: Page) {
+  // @ts-ignore
+  fromPage.__aluvia_mirrors ??= {};
+  for (const ev of MIRROR_EVENTS) {
+    // detach old
+    // @ts-ignore
+    if (fromPage.__aluvia_mirrors[ev]) {
+      // @ts-ignore
+      toPage.off?.(ev, fromPage.__aluvia_mirrors[ev]);
+    }
+    const handler = (...args: any[]) => {
+      // @ts-ignore
+      fromPage.emit?.(ev, ...args);
+    };
+    // @ts-ignore
+    fromPage.__aluvia_mirrors[ev] = handler;
+    toPage.on(ev as any, handler as any);
+  }
+}
+
 function forwardAllMethods(fromPage: Page, toPage: Page) {
   (fromPage as any)[TARGET] = toPage;
+  mirrorEvents(fromPage, toPage);
+
   const proto = Object.getPrototypeOf(toPage);
   const names = new Set([
     ...Object.getOwnPropertyNames(proto),
@@ -71,10 +116,35 @@ async function relaunchWithProxy(
   browserType: BrowserType<Browser>,
   launchDefaults: LaunchOptions,
   contextDefaults: BrowserContextOptions,
-  proxy: any
+  proxy: { server: string; username?: string; password?: string },
+  oldPage: Page
 ) {
-  const browser = await browserType.launch({ ...launchDefaults, proxy });
-  const context = await browser.newContext({ ...contextDefaults });
+  // Capture state/shape from old session
+  const oldCtx = oldPage.context();
+  const state = await oldCtx.storageState().catch(() => undefined);
+  const vp = oldPage.viewportSize();
+  const ua = await oldPage
+    .evaluate(() => navigator.userAgent)
+    .catch(() => undefined);
+
+  // Close old browser to avoid 2 windows lingering
+  try {
+    await oldCtx.browser()?.close();
+  } catch {}
+
+  const retryLaunch: LaunchOptions = {
+    headless: launchDefaults.headless ?? true,
+    ...launchDefaults,
+    proxy,
+  };
+
+  const browser = await browserType.launch(retryLaunch);
+  const context = await browser.newContext({
+    ...contextDefaults,
+    storageState: state,
+    userAgent: ua ?? contextDefaults.userAgent,
+    viewport: vp ?? contextDefaults.viewport,
+  });
   const page = await context.newPage();
   return { browser, context, page };
 }
@@ -91,7 +161,7 @@ function wrapPage(
   page.goto = async function patchedGoto(
     url: string,
     options?: Parameters<Page["goto"]>[1]
-  ) {
+  ): Promise<Response | null> {
     let lastErr: any;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt === 0) {
@@ -104,7 +174,6 @@ function wrapPage(
         }
       } else {
         const proxy = await getProxy();
-        console.log(JSON.stringify(proxy));
         if (!proxy) break;
 
         try {
@@ -112,10 +181,27 @@ function wrapPage(
             browserType,
             launchDefaults,
             contextDefaults,
-            proxy
+            proxy,
+            page // pass old page to carry state & close old browser
           );
+
+          // Teleport future calls & events to the new page
           forwardAllMethods(page, newPage);
-          return await newPage.goto(url, options);
+
+          const resp = await newPage.goto(url, {
+            ...(options ?? {}),
+            waitUntil: options?.waitUntil ?? "domcontentloaded",
+          });
+
+          await newPage.waitForFunction(
+            () =>
+              typeof document !== "undefined" &&
+              !!document.title &&
+              document.title.trim().length > 0,
+            { timeout: 15000 }
+          );
+
+          return resp ?? null;
         } catch (err) {
           lastErr = err;
           if (BACKOFF_MS) await sleep(BACKOFF_MS);

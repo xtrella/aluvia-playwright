@@ -14,6 +14,8 @@ import type {
 const PATCHED = Symbol.for("aluvia.patched");
 const TARGET = Symbol.for("aluvia.targetPage");
 
+// TODO: create test
+
 // TODO: get these from env
 const ALUVIA_MAX_RETRIES = 1;
 const ALUVIA_BACKOFF_MS = 300;
@@ -22,6 +24,7 @@ const ALUVIA_API_KEY =
   "51bb6928fc0c9468ef89da865ca7159bcda170e0d7b07c2f0617bffec2c70e60";
 
 const aluvia = new Aluvia(ALUVIA_API_KEY);
+// TODO: throw if no API key
 
 function matchRetryable(err: any): boolean {
   const txt = (err && (err.message || err.toString())) || "";

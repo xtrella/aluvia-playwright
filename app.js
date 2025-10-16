@@ -5,7 +5,7 @@ const { chromium } = require("./dist/index");
     headless: false,
   });
   const page = await browser.newPage();
-  await page.goto("https://www.binance.com/en");
+  await page.goto("https://github.com/xtrella/aluvia-playwright");
   const title = await page.title();
   console.log(title);
 

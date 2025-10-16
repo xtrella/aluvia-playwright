@@ -1,5 +1,5 @@
 import Aluvia from "aluvia-ts-sdk";
-
+import dotenv from "dotenv";
 import * as pw from "playwright";
 import type {
   Browser,
@@ -11,20 +11,26 @@ import type {
   Response,
 } from "playwright";
 
+dotenv.config();
+
 const PATCHED = Symbol.for("aluvia.patched");
 const TARGET = Symbol.for("aluvia.targetPage");
 
-// TODO: create test
+const ALUVIA_MAX_RETRIES = parseInt(process.env.ALUVIA_MAX_RETRIES || "1", 10);
+const ALUVIA_BACKOFF_MS = parseInt(process.env.ALUVIA_BACKOFF_MS || "300", 10);
+const ALUVIA_RETRY_ON = process.env.ALUVIA_RETRY_ON?.split(",") || [
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "net::ERR",
+  "Timeout",
+];
 
-// TODO: get these from env
-const ALUVIA_MAX_RETRIES = 1;
-const ALUVIA_BACKOFF_MS = 300;
-const ALUVIA_RETRY_ON = ["ECONNRESET", "ETIMEDOUT", "net::ERR", "Timeout"];
-const ALUVIA_API_KEY =
-  "51bb6928fc0c9468ef89da865ca7159bcda170e0d7b07c2f0617bffec2c70e60";
+const ALUVIA_API_KEY = process.env.ALUVIA_API_KEY || "";
+if (!ALUVIA_API_KEY) {
+  throw new Error(`ALUVIA_API_KEY environment variable is required`);
+}
 
 const aluvia = new Aluvia(ALUVIA_API_KEY);
-// TODO: throw if no API key
 
 function matchRetryable(err: any): boolean {
   const txt = (err && (err.message || err.toString())) || "";
@@ -38,8 +44,9 @@ function sleep(ms: number) {
 async function getProxy() {
   const proxy = await aluvia.first();
 
-  // TODO: throw if no proxy
-  if (!proxy) return null;
+  if (!proxy) {
+    throw new Error("Failed to get proxy from Aluvia");
+  }
 
   return {
     server: `http://${proxy.host}:${proxy.httpPort}`,

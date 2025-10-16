@@ -14,17 +14,18 @@ import type {
 const PATCHED = Symbol.for("aluvia.patched");
 const TARGET = Symbol.for("aluvia.targetPage");
 
-const MAX_RETRIES = 1;
-const BACKOFF_MS = 300;
-const RETRY_ON = ["ECONNRESET", "ETIMEDOUT", "net::ERR", "Timeout"];
+// TODO: get these from env
+const ALUVIA_MAX_RETRIES = 1;
+const ALUVIA_BACKOFF_MS = 300;
+const ALUVIA_RETRY_ON = ["ECONNRESET", "ETIMEDOUT", "net::ERR", "Timeout"];
+const ALUVIA_API_KEY =
+  "51bb6928fc0c9468ef89da865ca7159bcda170e0d7b07c2f0617bffec2c70e60";
 
-const aluvia = new Aluvia(
-  "51bb6928fc0c9468ef89da865ca7159bcda170e0d7b07c2f0617bffec2c70e60"
-);
+const aluvia = new Aluvia(ALUVIA_API_KEY);
 
 function matchRetryable(err: any): boolean {
   const txt = (err && (err.message || err.toString())) || "";
-  return RETRY_ON.some((k) => txt.includes(k));
+  return ALUVIA_RETRY_ON.some((k) => txt.includes(k));
 }
 
 function sleep(ms: number) {
@@ -33,6 +34,8 @@ function sleep(ms: number) {
 
 async function getProxy() {
   const proxy = await aluvia.first();
+
+  // TODO: throw if no proxy
   if (!proxy) return null;
 
   return {
@@ -163,14 +166,14 @@ function wrapPage(
     options?: Parameters<Page["goto"]>[1]
   ): Promise<Response | null> {
     let lastErr: any;
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    for (let attempt = 0; attempt <= ALUVIA_MAX_RETRIES; attempt++) {
       if (attempt === 0) {
         try {
           return await originalGoto(url, options);
         } catch (err) {
           lastErr = err;
           if (!matchRetryable(err)) break;
-          if (BACKOFF_MS) await sleep(BACKOFF_MS);
+          if (ALUVIA_BACKOFF_MS) await sleep(ALUVIA_BACKOFF_MS);
         }
       } else {
         const proxy = await getProxy();
@@ -204,7 +207,7 @@ function wrapPage(
           return resp ?? null;
         } catch (err) {
           lastErr = err;
-          if (BACKOFF_MS) await sleep(BACKOFF_MS);
+          if (ALUVIA_BACKOFF_MS) await sleep(ALUVIA_BACKOFF_MS);
         }
       }
     }

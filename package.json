@@ -1,0 +1,25 @@
+{
+  "name": "playwright-goto-patch",
+  "version": "0.1.0",
+  "description": "Patch utility for Playwright's page.goto method.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [
+    "playwright",
+    "patch",
+    "goto",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "playwright": "^1.56.0",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.0.0"
+  }
+}

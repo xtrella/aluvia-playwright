@@ -6,4 +6,6 @@ const { chromium } = require("./dist/index");
   });
   const page = await browser.newPage();
   await page.goto("https://www.binance.com/en");
+  const title = await page.title();
+  console.log(title);
 })();

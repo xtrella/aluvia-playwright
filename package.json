@@ -22,5 +22,8 @@
   },
   "peerDependencies": {
     "playwright": ">=1.0.0"
+  },
+  "dependencies": {
+    "aluvia-ts-sdk": "^2.0.0"
   }
 }

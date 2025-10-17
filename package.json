@@ -24,7 +24,7 @@
     "playwright": ">=1.0.0"
   },
   "dependencies": {
-    "aluvia-ts-sdk": "^2.0.0",
+    "aluvia-ts-sdk": "^2.0.1",
     "dotenv": "^17.2.3"
   }
 }

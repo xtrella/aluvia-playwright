@@ -2,10 +2,10 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist/cjs",
-    "module": "NodeNext",
+    "module": "CommonJS",
     "declaration": true,
     "declarationDir": "./dist/types",
-    "moduleResolution": "nodenext"
+    "moduleResolution": "Node"
   },
   "include": ["src/**/*"]
 }

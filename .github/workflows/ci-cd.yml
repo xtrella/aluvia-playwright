@@ -25,8 +25,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "20"
           cache: "npm"
+
+      - name: Update npm (ensure >= 11.5.1)
+        run: npm i -g npm@latest
 
       - name: Install dependencies
         run: npm ci
@@ -57,9 +60,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
-          cache: "npm"
+          node-version: "20"
           registry-url: "https://registry.npmjs.org"
+
+      - name: Update npm (ensure >= 11.5.1)
+        run: npm i -g npm@latest
 
       - name: Install dependencies
         run: npm ci
@@ -67,8 +72,23 @@ jobs:
       - name: Build package
         run: npm run build
 
+      - name: Ensure tokenless environment (OIDC only)
+        run: |
+          if env | grep -q '^NODE_AUTH_TOKEN='; then
+            echo "NODE_AUTH_TOKEN is set; remove it for Trusted Publishing." >&2
+            exit 1
+          fi
+          npm config get //registry.npmjs.org/:_authToken || true
+
       - name: Publish to NPM (Trusted Publisher)
         run: npm publish --access public
+
+      - name: Derive version without 'v' prefix
+        id: ver
+        run: |
+          # prefer package.json version (matches what was published)
+          echo "PKG_VERSION=$(node -p \"require('./package.json').version\")" >> $GITHUB_ENV
+          echo "TAG_NO_V=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -84,7 +104,7 @@ jobs:
             ## Installation
 
             ```bash
-            npm install aluvia-playwright@${{ github.ref_name }}
+            npm install aluvia-playwright@${{ env.PKG_VERSION }}
             ```
 
             ## Documentation

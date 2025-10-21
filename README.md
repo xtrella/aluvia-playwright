@@ -33,9 +33,9 @@ pnpm add aluvia-playwright
 ## 🚀 Quick Start
 
 ```typescript
-import pw from "aluvia-playwright";
+import { chromium } from "aluvia-playwright";
 
-const browser = await pw.chromium.launch();
+const browser = await chromium.launch();
 const context = await browser.newContext();
 const page = await context.newPage();
 await page.goto("https://example.com");
@@ -77,9 +77,9 @@ This package exports the Playwright API, with all browser types patched for prox
 
 All Playwright browser types (`chromium`, `firefox`, `webkit`) are patched:
 
-- `pw.chromium.launch()`
-- `pw.firefox.launch()`
-- `pw.webkit.launch()`
+- `chromium.launch()`
+- `firefox.launch()`
+- `webkit.launch()`
 
 All contexts and pages created from these browsers will automatically use Aluvia proxies and retry logic.
 

@@ -2,11 +2,18 @@
   "name": "aluvia-playwright",
   "version": "1.0.1",
   "description": "Patch utility for Playwright's page.goto method.",
-  "main": "dist/index.js",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "npm run clean && tsc",
+    "build": "npm run clean && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json",
     "release:check": "npm run build && npm pack --dry-run",
     "release:tag": "git tag v$(node -p \"require('./package.json').version\")",
     "release:push": "git push origin main && git push origin --tags",

@@ -21,8 +21,12 @@ const ALUVIA_BACKOFF_MS = parseInt(process.env.ALUVIA_BACKOFF_MS || "300", 10);
 const ALUVIA_RETRY_ON = process.env.ALUVIA_RETRY_ON?.split(",") || [
   "ECONNRESET",
   "ETIMEDOUT",
+  "ENETUNREACH",
+  "EAI_AGAIN",
   "net::ERR",
   "Timeout",
+  "Navigation failed because page crashed",
+  "Target page, context or browser has been closed",
 ];
 
 const ALUVIA_API_KEY = process.env.ALUVIA_API_KEY || "";
@@ -32,9 +36,50 @@ if (!ALUVIA_API_KEY) {
 
 const aluvia = new Aluvia(ALUVIA_API_KEY);
 
+function backoffDelay(attempt: number) {
+  const base = ALUVIA_BACKOFF_MS * Math.pow(2, attempt);
+  const jitter = Math.random() * 100;
+  return base + jitter;
+}
+
+async function isBlockedResponse(response: Response | null): Promise<boolean> {
+  if (!response) return false;
+  const status = response.status();
+
+  if ([403, 429].includes(status)) return true;
+
+  try {
+    const text = await response.text();
+    return (
+      /captcha/i.test(text) ||
+      /access denied/i.test(text) ||
+      /forbidden/i.test(text)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function matchRetryable(err: any): boolean {
-  const txt = (err && (err.message || err.toString())) || "";
-  return ALUVIA_RETRY_ON.some((k) => txt.includes(k));
+  if (!err) return false;
+  const txt = (err.message || err.toString() || "");
+  const code = err.code || "";
+  const name = err.name || "";
+
+  // Support RegExp patterns in ALUVIA_RETRY_ON
+  return ALUVIA_RETRY_ON.some((pattern) => {
+    if (!pattern) return false;
+    try {
+      // If pattern starts and ends with '/', treat as RegExp
+      if (pattern.startsWith("/") && pattern.endsWith("/")) {
+        const re = new RegExp(pattern.slice(1, -1));
+        return re.test(txt) || re.test(code) || re.test(name);
+      }
+      return txt.includes(pattern) || code.includes(pattern) || name.includes(pattern);
+    } catch {
+      return txt.includes(pattern) || code.includes(pattern) || name.includes(pattern);
+    }
+  });
 }
 
 function sleep(ms: number) {
@@ -183,7 +228,7 @@ function wrapPage(
         } catch (err) {
           lastErr = err;
           if (!matchRetryable(err)) break;
-          if (ALUVIA_BACKOFF_MS) await sleep(ALUVIA_BACKOFF_MS);
+          if (ALUVIA_BACKOFF_MS) await sleep(backoffDelay(attempt));
         }
       } else {
         const proxy = await getProxy();
@@ -205,6 +250,10 @@ function wrapPage(
             ...(options ?? {}),
             waitUntil: options?.waitUntil ?? "domcontentloaded",
           });
+
+          if (await isBlockedResponse(resp)) {
+            throw new Error(`Soft block detected (status ${resp?.status?.()})`);
+          }
 
           await newPage.waitForFunction(
             () =>

@@ -299,9 +299,8 @@ function wrapBrowserType(key: "chromium" | "firefox" | "webkit") {
 }
 
 (["chromium", "firefox", "webkit"] as const).forEach(wrapBrowserType);
-exports.chromium = pw.chromium;
-exports.firefox = pw.firefox;
-exports.webkit = pw.webkit;
+export const chromium = pw.chromium;
+export const firefox = pw.firefox;
+export const webkit = pw.webkit;
 
-// export everything else from Playwright
-Object.assign(exports, pw);
+export * from "playwright";

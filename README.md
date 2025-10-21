@@ -38,7 +38,7 @@ import { chromium } from "aluvia-playwright";
 const browser = await chromium.launch();
 const context = await browser.newContext();
 const page = await context.newPage();
-await page.goto("https://example.com");
+await page.goto("https://wikipedia.org");
 ```
 
 All Playwright browser types (`chromium`, `firefox`, `webkit`) are supported. The wrapper automatically applies proxy and retry logic to all new pages and contexts.

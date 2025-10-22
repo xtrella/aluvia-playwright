@@ -21,12 +21,8 @@ const ALUVIA_BACKOFF_MS = parseInt(process.env.ALUVIA_BACKOFF_MS || "300", 10);
 const ALUVIA_RETRY_ON = process.env.ALUVIA_RETRY_ON?.split(",") || [
   "ECONNRESET",
   "ETIMEDOUT",
-  "ENETUNREACH",
-  "EAI_AGAIN",
   "net::ERR",
   "Timeout",
-  "Navigation failed because page crashed",
-  "Target page, context or browser has been closed",
 ];
 
 const ALUVIA_API_KEY = process.env.ALUVIA_API_KEY || "";
@@ -42,31 +38,13 @@ function backoffDelay(attempt: number) {
   return base + jitter;
 }
 
-async function isBlockedResponse(response: Response | null): Promise<boolean> {
-  if (!response) return false;
-  const status = response.status();
-
-  if ([403, 429].includes(status)) return true;
-
-  try {
-    const text = await response.text();
-    return (
-      /captcha/i.test(text) ||
-      /access denied/i.test(text) ||
-      /forbidden/i.test(text)
-    );
-  } catch {
-    return false;
-  }
-}
-
 function matchRetryable(err: any): boolean {
   if (!err) return false;
-  const txt = (err.message || err.toString() || "");
-  const code = err.code || "";
-  const name = err.name || "";
 
-  // Support RegExp patterns in ALUVIA_RETRY_ON
+  const txt = String(err.message || err.toString() || "");
+  const code = String(err.code ?? "");
+  const name = String(err.name ?? "");
+
   return ALUVIA_RETRY_ON.some((pattern) => {
     if (!pattern) return false;
     try {
@@ -75,9 +53,18 @@ function matchRetryable(err: any): boolean {
         const re = new RegExp(pattern.slice(1, -1));
         return re.test(txt) || re.test(code) || re.test(name);
       }
-      return txt.includes(pattern) || code.includes(pattern) || name.includes(pattern);
+
+      return (
+        txt.includes(pattern) ||
+        code.includes(pattern) ||
+        name.includes(pattern)
+      );
     } catch {
-      return txt.includes(pattern) || code.includes(pattern) || name.includes(pattern);
+      return (
+        txt.includes(pattern) ||
+        code.includes(pattern) ||
+        name.includes(pattern)
+      );
     }
   });
 }
@@ -251,10 +238,6 @@ function wrapPage(
             waitUntil: options?.waitUntil ?? "domcontentloaded",
           });
 
-          if (await isBlockedResponse(resp)) {
-            throw new Error(`Soft block detected (status ${resp?.status?.()})`);
-          }
-
           await newPage.waitForFunction(
             () =>
               typeof document !== "undefined" &&
@@ -266,7 +249,7 @@ function wrapPage(
           return resp ?? null;
         } catch (err) {
           lastErr = err;
-          if (ALUVIA_BACKOFF_MS) await sleep(ALUVIA_BACKOFF_MS);
+          if (ALUVIA_BACKOFF_MS) await sleep(backoffDelay(attempt));
         }
       }
     }

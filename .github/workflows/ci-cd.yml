@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Package
+    name: Build & Test Package
     runs-on: ubuntu-latest
 
     steps:
@@ -29,6 +29,15 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Run unit tests
+        env:
+          # Dummy values for tests
+          ALUVIA_API_KEY: "test_key"
+          ALUVIA_MAX_RETRIES: "1"
+          ALUVIA_BACKOFF_MS: "50"
+          ALUVIA_RETRY_ON: "ETIMEDOUT,net::ERR"
+        run: npm test
 
       - name: Build package
         run: npm run build
@@ -58,6 +67,14 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Run unit tests
+        env:
+          ALUVIA_API_KEY: "test_key"
+          ALUVIA_MAX_RETRIES: "1"
+          ALUVIA_BACKOFF_MS: "50"
+          ALUVIA_RETRY_ON: "ETIMEDOUT,net::ERR"
+        run: npm test
 
       - name: Build package
         run: npm run build

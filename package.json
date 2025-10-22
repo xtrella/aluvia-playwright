@@ -1,19 +1,22 @@
 {
   "name": "aluvia-playwright",
-  "version": "1.1.2",
+  "version": "1.1.5",
   "description": "Patch utility for Playwright's page.goto method.",
-  "main": "dist/cjs/index.js",
-  "module": "dist/esm/index.js",
-  "types": "dist/index.d.ts",
+  "type": "module",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/types/index.d.ts",
       "import": "./dist/esm/index.js",
       "require": "./dist/cjs/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "npm run clean && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json",
+    "build": "npm run clean && tsc -p tsconfig.esm.json && tsc -p tsconfig.cjs.json && node -e \"require('fs').mkdirSync('dist/cjs',{recursive:true});require('fs').writeFileSync('dist/cjs/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\"",
     "release:check": "npm run build && npm pack --dry-run",
     "release:tag": "git tag v$(node -p \"require('./package.json').version\")",
     "release:push": "git push origin main && git push origin --tags",
@@ -30,17 +33,24 @@
   ],
   "author": "",
   "license": "MIT",
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "sideEffects": false,
+  "peerDependencies": {
+    "playwright": ">=1.0.0"
+  },
+  "dependencies": {
+    "aluvia-ts-sdk": "^2.1.2",
+    "dotenv": "^17.2.3"
+  },
   "devDependencies": {
     "@types/node": "^24.7.2",
     "playwright": "^1.56.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
-  },
-  "peerDependencies": {
-    "playwright": ">=1.0.0"
-  },
-  "dependencies": {
-    "aluvia-ts-sdk": "^2.1.0",
-    "dotenv": "^17.2.3"
   }
 }

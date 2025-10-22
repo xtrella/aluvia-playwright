@@ -15,6 +15,7 @@ dotenv.config();
 
 const PATCHED = Symbol.for("aluvia.patched");
 const TARGET = Symbol.for("aluvia.targetPage");
+const EMIT_ORIGINAL = Symbol.for("aluvia.emitOriginal");
 
 const ALUVIA_MAX_RETRIES = parseInt(process.env.ALUVIA_MAX_RETRIES || "1", 10);
 const ALUVIA_BACKOFF_MS = parseInt(process.env.ALUVIA_BACKOFF_MS || "300", 10);
@@ -32,9 +33,41 @@ if (!ALUVIA_API_KEY) {
 
 const aluvia = new Aluvia(ALUVIA_API_KEY);
 
+function backoffDelay(attempt: number) {
+  const base = ALUVIA_BACKOFF_MS * Math.pow(2, attempt);
+  const jitter = Math.random() * 100;
+  return base + jitter;
+}
+
 function matchRetryable(err: any): boolean {
-  const txt = (err && (err.message || err.toString())) || "";
-  return ALUVIA_RETRY_ON.some((k) => txt.includes(k));
+  if (!err) return false;
+
+  const txt = String(err.message || err.toString() || "");
+  const code = String(err.code ?? "");
+  const name = String(err.name ?? "");
+
+  return ALUVIA_RETRY_ON.some((pattern) => {
+    if (!pattern) return false;
+    try {
+      // If pattern starts and ends with '/', treat as RegExp
+      if (pattern.startsWith("/") && pattern.endsWith("/")) {
+        const re = new RegExp(pattern.slice(1, -1));
+        return re.test(txt) || re.test(code) || re.test(name);
+      }
+
+      return (
+        txt.includes(pattern) ||
+        code.includes(pattern) ||
+        name.includes(pattern)
+      );
+    } catch {
+      return (
+        txt.includes(pattern) ||
+        code.includes(pattern) ||
+        name.includes(pattern)
+      );
+    }
+  });
 }
 
 function sleep(ms: number) {
@@ -88,8 +121,15 @@ function mirrorEvents(fromPage: Page, toPage: Page) {
       toPage.off?.(ev, fromPage.__aluvia_mirrors[ev]);
     }
     const handler = (...args: any[]) => {
-      // @ts-ignore
-      fromPage.emit?.(ev, ...args);
+      const emitOriginal =
+        (fromPage as any)[EMIT_ORIGINAL] ||
+        (typeof (fromPage as any).emit === "function"
+          ? (fromPage as any).emit.bind(fromPage)
+          : undefined);
+
+      if (emitOriginal) {
+        emitOriginal(ev, ...args);
+      }
     };
     // @ts-ignore
     fromPage.__aluvia_mirrors[ev] = handler;
@@ -99,6 +139,13 @@ function mirrorEvents(fromPage: Page, toPage: Page) {
 
 function forwardAllMethods(fromPage: Page, toPage: Page) {
   (fromPage as any)[TARGET] = toPage;
+  // Save the original emit once (used by mirrorEvents)
+  if (
+    !(fromPage as any)[EMIT_ORIGINAL] &&
+    typeof (fromPage as any).emit === "function"
+  ) {
+    (fromPage as any)[EMIT_ORIGINAL] = (fromPage as any).emit.bind(fromPage);
+  }
   mirrorEvents(fromPage, toPage);
 
   const proto = Object.getPrototypeOf(toPage);
@@ -109,6 +156,10 @@ function forwardAllMethods(fromPage: Page, toPage: Page) {
 
   for (const name of names) {
     if (name === "constructor") continue;
+
+    // do NOT proxy 'emit' to avoid recursion
+    if (name === "emit") continue;
+
     const fn = (toPage as any)[name];
     if (typeof fn !== "function") continue;
     if ((fromPage as any)[name]?.[PATCHED]) continue;
@@ -172,6 +223,7 @@ function wrapPage(
 
   const originalGoto = page.goto.bind(page);
   page.goto = async function patchedGoto(
+    this: Page,
     url: string,
     options?: Parameters<Page["goto"]>[1]
   ): Promise<Response | null> {
@@ -183,10 +235,13 @@ function wrapPage(
         } catch (err) {
           lastErr = err;
           if (!matchRetryable(err)) break;
-          if (ALUVIA_BACKOFF_MS) await sleep(ALUVIA_BACKOFF_MS);
+          if (ALUVIA_BACKOFF_MS) await sleep(backoffDelay(attempt));
         }
       } else {
-        const proxy = await getProxy();
+        const proxy = await getProxy().catch((e) => {
+          lastErr = e;
+          return undefined;
+        });
         if (!proxy) break;
 
         try {
@@ -195,18 +250,19 @@ function wrapPage(
             launchDefaults,
             contextDefaults,
             proxy,
-            page // pass old page to carry state & close old browser
+            this // old page
           );
 
           // Teleport future calls & events to the new page
-          forwardAllMethods(page, newPage);
+          forwardAllMethods(this, newPage);
 
           const resp = await newPage.goto(url, {
             ...(options ?? {}),
             waitUntil: options?.waitUntil ?? "domcontentloaded",
           });
 
-          await newPage.waitForFunction(
+          // simple readiness gate
+          await (newPage as any).waitForFunction(
             () =>
               typeof document !== "undefined" &&
               !!document.title &&
@@ -217,7 +273,7 @@ function wrapPage(
           return resp ?? null;
         } catch (err) {
           lastErr = err;
-          if (ALUVIA_BACKOFF_MS) await sleep(ALUVIA_BACKOFF_MS);
+          if (ALUVIA_BACKOFF_MS) await sleep(backoffDelay(attempt));
         }
       }
     }
@@ -235,6 +291,12 @@ function wrapContext(
   contextDefaults: BrowserContextOptions
 ) {
   if (!ctx || (ctx as any)[PATCHED]) return ctx;
+
+  // Guard for mocks that don't implement newPage
+  if (typeof (ctx as any).newPage !== "function") {
+    (ctx as any)[PATCHED] = true;
+    return ctx;
+  }
 
   const origNewPage = ctx.newPage.bind(ctx);
   ctx.newPage = async (...args) => {
@@ -282,14 +344,14 @@ function wrapBrowserType(key: "chromium" | "firefox" | "webkit") {
     return browser;
   };
 
-  if (typeof bt.launchPersistentContext === "function") {
-    const origLPC = bt.launchPersistentContext.bind(bt);
-    bt.launchPersistentContext = async function (
+  if (typeof (bt as any).launchPersistentContext === "function") {
+    const origLPC = (bt as any).launchPersistentContext.bind(bt);
+    (bt as any).launchPersistentContext = async function (
       userDataDir: string,
       launchOptions: LaunchOptions = {},
       contextOptions: BrowserContextOptions = {}
     ) {
-      const ctx = await origLPC(userDataDir, launchOptions);
+      const ctx = await origLPC(userDataDir, launchOptions, contextOptions);
       wrapContext(ctx, bt, launchOptions, contextOptions);
       return ctx;
     };

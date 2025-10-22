@@ -1,6 +1,6 @@
 {
   "name": "aluvia-playwright",
-  "version": "1.1.5",
+  "version": "1.2.0",
   "description": "Patch utility for Playwright's page.goto method.",
   "type": "module",
   "main": "./dist/cjs/index.js",
@@ -21,7 +21,9 @@
     "release:tag": "git tag v$(node -p \"require('./package.json').version\")",
     "release:push": "git push origin main && git push origin --tags",
     "release:version": "node -p \"require('./package.json').version\"",
-    "audit:check": "npm audit --audit-level moderate"
+    "audit:check": "npm audit --audit-level moderate",
+    "test": "vitest run --reporter=dot",
+    "test:watch": "vitest"
   },
   "keywords": [
     "playwright",
@@ -48,6 +50,7 @@
   "devDependencies": {
     "@types/node": "^24.7.2",
     "playwright": "^1.56.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
   }
 }

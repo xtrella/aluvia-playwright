@@ -1,6 +1,6 @@
 {
   "name": "aluvia-playwright",
-  "version": "1.1.5",
+  "version": "1.2.0",
   "description": "Patch utility for Playwright's page.goto method.",
   "type": "module",
   "main": "./dist/cjs/index.js",

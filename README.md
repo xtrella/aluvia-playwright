@@ -3,18 +3,16 @@
 [![npm version](https://badge.fury.io/js/aluvia-playwright.svg)](https://www.npmjs.com/package/aluvia-playwright)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org)
-[![Node.js](https://img.shields.io/node/v/aluvia-playwright.svg)](https://nodejs.org)
 
-The **official Playwright wrapper for Aluvia mobile proxies**. This lightweight, TypeScript-first package transparently adds proxy rotation and retry logic to Playwright, making your automation more robust against network errors—without changing your app code or breaking your existing page event listeners.
+Automatically retry failed [Playwright](https://playwright.dev) navigations using real mobile proxies from [Aluvia](https://www.aluvia.io).
 
 ## ✨ Features
 
-- 🔄 **Automatic Proxy Rotation**: Seamlessly relaunches Playwright pages with fresh Aluvia proxies on network errors
-- 🔁 **Auto-Retry Navigation**: Retries `page.goto()` transparently when errors match your configured patterns
-- 🧩 **Drop-in Replacement**: No code changes required—just swap your Playwright import
-- 🏷️ **TypeScript Ready**: Full type definitions for all patched Playwright APIs
-- 🪝 **Event Mirroring**: Keeps your page event listeners working after proxy switches
-- ⚡ **Lightweight**: Minimal dependencies, fast startup
+- **Automatic Proxy Renewal on Failure** - When a navigation fails, a new Aluvia proxy is fetched and the browser is relaunched automatically.
+- **Automatic Retries** - Retries `page.goto()` based on error patterns you define (e.g. `ETIMEDOUT`, `ECONNRESET`).
+- **Event Preservation** - Page event listeners remain active after a retry or relaunch.
+- **Drop-in Replacement** - Import from `aluvia-playwright` instead of `playwright`; everything else stays the same.
+- **TypeScript Ready** - Full typings for all patched Playwright APIs.
 
 ## 📦 Installation
 
@@ -38,7 +36,24 @@ import { chromium } from "aluvia-playwright";
 const browser = await chromium.launch();
 const context = await browser.newContext();
 const page = await context.newPage();
-await page.goto("https://wikipedia.org");
+
+await page.goto("https://blocked-website.com");
+
+// Interact with the page as usual
+const title = await page.title();
+console.log("Page title:", title);
+
+await page.mouse.wheel(0, 1000);
+await page.click("a.some-link");
+
+// Run custom JavaScript in the page context
+const headline = await page.evaluate(() => {
+  const el = document.querySelector("h1");
+  return el ? el.textContent?.trim() : "No headline found";
+});
+console.log("Headline:", headline);
+
+await browser.close();
 ```
 
 All Playwright browser types (`chromium`, `firefox`, `webkit`) are supported. The wrapper automatically applies proxy and retry logic to all new pages and contexts.
@@ -65,39 +80,36 @@ ALUVIA_RETRY_ON=ECONNRESET,ETIMEDOUT,net::ERR,Timeout
 
 ## 🛠️ How It Works
 
-- On navigation (`page.goto`), if a retryable error occurs, the wrapper fetches a new proxy from Aluvia and relaunches the browser/page with the new proxy.
-- All page events are mirrored to ensure listeners remain functional after a proxy switch.
-- The wrapper is transparent: you interact with Playwright as usual.
+1. You call `page.goto(url)` as usual.
+2. If Playwright throws an error matching `ALUVIA_RETRY_ON`, the wrapper:
 
-## 📚 API Reference
+   - Requests a fresh proxy from the Aluvia API.
+   - Relaunches the browser using that proxy.
+   - Re-binds your existing page events and retries the navigation.
 
-This package exports the Playwright API, with all browser types patched for proxy and retry logic. All standard Playwright methods are available.
+3. If the retry also fails, it backs off (with jitter) and tries again, up to `ALUVIA_MAX_RETRIES`.
 
-### Patched Playwright API
+All of this happens automatically - you keep the same page object reference and your event listeners still work.
 
-All Playwright browser types (`chromium`, `firefox`, `webkit`) are patched:
+## 📚 API Notes
+
+This package re-exports the standard Playwright API but overrides the browser launch methods:
 
 - `chromium.launch()`
 - `firefox.launch()`
 - `webkit.launch()`
 
-All contexts and pages created from these browsers will automatically use Aluvia proxies and retry logic.
-
-#### Navigation Retry Logic
-
-- `page.goto(url)` will retry up to `ALUVIA_MAX_RETRIES` times if errors match any substring in `ALUVIA_RETRY_ON`.
-- On retry, a new proxy is fetched from Aluvia and the browser/page is relaunched.
-- All page events are mirrored to the new page, so listeners remain functional.
-
-#### Environment Variables
-
-See [Environment Variables](#️-environment-variables) above for details.
+Every page or context created from these browsers automatically uses the retry + proxy logic. There are no new public methods - you use Playwright exactly as before.
 
 ## 📦 Requirements
 
 - Node.js >= 16
 - Playwright
 - Aluvia API key
+
+## 🧩 About Aluvia
+
+[Aluvia](https://www.aluvia.io/) provides real mobile proxy networks for developers and data teams, built for web automation, testing, and scraping with real device IPs.
 
 ## 📄 License
 

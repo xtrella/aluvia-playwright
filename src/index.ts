@@ -16,7 +16,7 @@ dotenv.config();
 const PATCHED = Symbol.for("aluvia.patched");
 const TARGET = Symbol.for("aluvia.targetPage");
 const EMIT_ORIGINAL = Symbol.for("aluvia.emitOriginal");
-const GOTO_ORIGINAL = Symbol.for("aluvia.originalGoto");
+const GOTO_ORIGINAL = Symbol.for("aluvia.gotoOriginal");
 
 const ALUVIA_MAX_RETRIES = parseInt(process.env.ALUVIA_MAX_RETRIES || "1", 10);
 const ALUVIA_BACKOFF_MS = parseInt(process.env.ALUVIA_BACKOFF_MS || "300", 10);

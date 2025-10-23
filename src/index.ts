@@ -16,6 +16,7 @@ dotenv.config();
 const PATCHED = Symbol.for("aluvia.patched");
 const TARGET = Symbol.for("aluvia.targetPage");
 const EMIT_ORIGINAL = Symbol.for("aluvia.emitOriginal");
+const GOTO_ORIGINAL = Symbol.for("aluvia.originalGoto");
 
 const ALUVIA_MAX_RETRIES = parseInt(process.env.ALUVIA_MAX_RETRIES || "1", 10);
 const ALUVIA_BACKOFF_MS = parseInt(process.env.ALUVIA_BACKOFF_MS || "300", 10);
@@ -263,6 +264,9 @@ function wrapPage(
   if (!page || (page as any)[PATCHED]) return page;
 
   const originalGoto = page.goto.bind(page);
+  // Save original goto so we can call it later on replacement pages
+  (page as any)[GOTO_ORIGINAL] = originalGoto;
+
   page.goto = async function patchedGoto(
     this: Page,
     url: string,
@@ -297,7 +301,13 @@ function wrapPage(
           // Teleport future calls & events to the new page
           forwardAllMethods(this, newPage);
 
-          const resp = await newPage.goto(url, {
+          // Call the original (unpatched) goto of the new page
+          // to ensure we don't get into a recursion loop.
+          const rawGoto =
+            (newPage as any)[GOTO_ORIGINAL]?.bind(newPage) ??
+            newPage.goto.bind(newPage);
+
+          const resp = await rawGoto(url, {
             ...(options ?? {}),
             waitUntil: options?.waitUntil ?? "domcontentloaded",
           });

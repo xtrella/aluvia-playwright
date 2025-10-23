@@ -162,19 +162,6 @@ function forwardAllMethods(fromPage: Page, toPage: Page) {
     if (name === "constructor" || name === "emit") continue;
     // Skip properties that start with _ (Playwright internals)
     if (typeof name === "string" && name.startsWith("_")) continue;
-    // Skip known Playwright internals that can cause recursion
-    if (
-      [
-        "_events",
-        "_eventListeners",
-        "_guid",
-        "_channel",
-        "_initializer",
-        "_wrapApiCall",
-      ].includes(name)
-    ) {
-      continue;
-    }
 
     const desc =
       Object.getOwnPropertyDescriptor(proto, name) ||

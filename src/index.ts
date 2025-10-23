@@ -155,23 +155,64 @@ function forwardAllMethods(fromPage: Page, toPage: Page) {
   ]);
 
   for (const name of names) {
-    if (name === "constructor") continue;
+    // Skip symbols
+    if (typeof name === "symbol") continue;
+    // Skip constructor and emit
+    if (name === "constructor" || name === "emit") continue;
+    // Skip properties that start with _ (Playwright internals)
+    if (typeof name === "string" && name.startsWith("_")) continue;
+    // Skip known Playwright internals that can cause recursion
+    if (
+      [
+        "_events",
+        "_eventListeners",
+        "_guid",
+        "_channel",
+        "_initializer",
+        "_wrapApiCall",
+      ].includes(name)
+    ) {
+      continue;
+    }
 
-    // do NOT proxy 'emit' to avoid recursion
-    if (name === "emit") continue;
+    const desc =
+      Object.getOwnPropertyDescriptor(proto, name) ||
+      Object.getOwnPropertyDescriptor(toPage, name);
 
-    const fn = (toPage as any)[name];
-    if (typeof fn !== "function") continue;
-    if ((fromPage as any)[name]?.[PATCHED]) continue;
-
-    try {
-      (fromPage as any)[name] = function (...args: any[]) {
-        const active = (fromPage as any)[TARGET] || toPage;
-        return (active as any)[name](...args);
-      };
-      (fromPage as any)[name][PATCHED] = true;
-    } catch {
-      // ignore
+    // Forward methods
+    if (typeof (toPage as any)[name] === "function") {
+      if ((fromPage as any)[name]?.[PATCHED]) continue;
+      try {
+        (fromPage as any)[name] = function (...args: any[]) {
+          const active = (fromPage as any)[TARGET] || toPage;
+          return (active as any)[name](...args);
+        };
+        (fromPage as any)[name][PATCHED] = true;
+      } catch {
+        // ignore
+      }
+    } else if (desc && (desc.get || desc.value !== undefined)) {
+      // Forward non-function properties (getters/values) dynamically
+      // Only define if not already defined as a getter
+      const existing = Object.getOwnPropertyDescriptor(fromPage, name);
+      if (!existing || typeof existing.get !== "function") {
+        try {
+          Object.defineProperty(fromPage, name, {
+            configurable: true,
+            enumerable: true,
+            get() {
+              const active = (fromPage as any)[TARGET] || toPage;
+              return (active as any)[name];
+            },
+            set(val) {
+              const active = (fromPage as any)[TARGET] || toPage;
+              (active as any)[name] = val;
+            },
+          });
+        } catch {
+          // ignore
+        }
+      }
     }
   }
 }
